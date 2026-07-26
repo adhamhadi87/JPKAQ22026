@@ -11,7 +11,7 @@ import streamlit.components.v1 as components
 # TETAPAN PAGE
 # =======================
 st.set_page_config(
-    page_title="PRESTASI PERBELANJAAN DAN HASIL CIDB SEHINGGA 30 JUN 2026",
+    page_title="PRESTASI PERBELANJAAN DAN HASIL CIDB SEHINGGA SUKU KEDUA 2026",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -1537,8 +1537,8 @@ menu_map = {
 menu = menu_map.get(menu_label, "1. Belanja & Hasil")
 
 tajuk_utama = {
-    "1. Belanja & Hasil": "📊 PRESTASI PERBELANJAAN DAN HASIL CIDB SEHINGGA 30 JUN 2026",
-    "2. Geran": "📊 PRESTASI GERAN SEHINGGA 30 JUN 2026",
+    "1. Belanja & Hasil": "📊 PRESTASI PERBELANJAAN DAN HASIL CIDB SEHINGGA SUKU KEDUA 2026",
+    "2. Geran": "📊 PRESTASI GERAN SEHINGGA SUKU KEDUA 2026",
     "3. P&L": "📊 Profit & Loss",
     "4. Balance Sheet": "📊 Balance Sheet",
     "5. Cash Flow": "📊 Cash Flow",
@@ -3484,7 +3484,7 @@ elif menu == "3. P&L":
     # =======================
     # P&L - DATA RASMI JADUAL 6
     # Rujukan: 4.0 PRESTASI KEWANGAN CIDB
-    # Jadual 6: Ringkasan Hasil dan Perbelanjaan Sehingga 30 Jun 2026
+    # Jadual 6: Ringkasan Hasil dan Perbelanjaan Sehingga Suku Kedua 2026
     # =======================
 
     def kira_prestasi(sebenar, asas):
@@ -3653,7 +3653,7 @@ elif menu == "3. P&L":
                 "NILAI_JUTA": "Juta",
                 "PERKARA": ""
             },
-            title="PRESTASI HASIL & PERBELANJAAN CIDB SEHINGGA 30 JUN 2026"
+            title="PRESTASI HASIL & PERBELANJAAN CIDB SEHINGGA SUKU KEDUA 2026"
         )
 
         fig_pl.update_traces(
@@ -3719,7 +3719,7 @@ elif menu == "3. P&L":
                 "NILAI_JUTA": "Juta",
                 "JENIS": ""
             },
-            title="PECAHAN BELANJA CIDB SEHINGGA 30 JUN 2026"
+            title="PECAHAN BELANJA CIDB SEHINGGA SUKU KEDUA 2026"
         )
 
         fig_belanja.update_traces(
@@ -4018,7 +4018,7 @@ elif menu == "4. Balance Sheet":
     # =======================
     # BALANCE SHEET
     # Rujukan Word:
-    # Jadual 7: Penyata Kedudukan Kewangan pada 30 Jun 2026
+    # Jadual 7: Penyata Kedudukan Kewangan pada Suku Kedua 2026
     #
     # Data sebenar daripada Word:
     # 06-2026 dan 2025
@@ -4186,7 +4186,7 @@ elif menu == "5. Cash Flow":
     # =======================
     # CASH FLOW
     # Rujukan Word:
-    # Jadual 8: Penyata Aliran Tunai bagi tahun kewangan berakhir 30 Jun 2026
+    # Jadual 8: Penyata Aliran Tunai bagi tahun kewangan berakhir Suku Kedua 2026
     #
     # Data diekstrak daripada Word:
     # 06-2026 dan 2025
