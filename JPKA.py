@@ -5,14 +5,13 @@ import plotly.graph_objects as go
 from io import BytesIO
 from textwrap import dedent
 import os
-import re
 import streamlit.components.v1 as components
 
 # =======================
 # TETAPAN PAGE
 # =======================
 st.set_page_config(
-    page_title="PRESTASI PERBELANJAAN DAN HASIL CIDB",
+    page_title="PRESTASI PERBELANJAAN DAN HASIL CIDB SEHINGGA 30 JUN 2026",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -23,9 +22,9 @@ st.set_page_config(
 # =======================
 # Password utama:
 # - Streamlit Cloud: letak APP_PASSWORD dalam Settings > Secrets
-# - Local PC: kalau tiada secrets/env, default sementara ialah "JPKA032026"
+# - Local PC: kalau tiada secrets/env, default sementara ialah "JPKA062026"
 #   Tukar default ini kalau mahu password lain.
-DEFAULT_APP_PASSWORD = "JPKA032026"
+DEFAULT_APP_PASSWORD = "JPKA062026"
 
 
 def get_app_password():
@@ -1144,9 +1143,9 @@ def kemas_label_bajet(trace):
         .replace("BAJET_JT", "Bajet")
         .replace("SASARAN_JT", "Bajet Qtr")
         .replace("SEBENAR_JT", "Sebenar")
-        .replace("BAJET 2026", "Bajet")
-        .replace("BAJET 06-2026", "Bajet Qtr")
-        .replace("SEBENAR 06-2026", "Sebenar")
+        .replace("BAJET 2025", "Bajet")
+        .replace("SASARAN Q1-25", "Bajet Qtr")
+        .replace("SEBENAR Q1-25", "Sebenar")
     )
     return trace
 
@@ -1158,10 +1157,10 @@ def rename_summary_columns(df):
         "DESC": "Item",
         "Quarter": "Tempoh",
         "KOD1": "Kod Item",
-        "BAJET 2026": "Bajet",
-        "BAJET 06-2026": "Bajet Qtr",
-        "SEBENAR 06-2026": "Sebenar 06-2026",
-        "AUDITED 06-2025": "Sebenar 06-2025"
+        "BAJET 2025": "Bajet",
+        "SASARAN Q1-25": "Bajet Qtr",
+        "SEBENAR Q1-25": "Sebenar 06-2026",
+        "SEBENAR 06-2025": "Sebenar 06-2025"
     })
 
 
@@ -1370,151 +1369,93 @@ def detect_amount_column(df):
 # LOAD DATA BELANJA & HASIL
 # Nota:
 # - Belanja & Hasil kini guna SATU fail Excel sahaja:
-#   JPKA_ANALISA PK CIDB 03-2026.xlsx
+#   JPKA_ANALISA PK CIDB 06-2026.xlsx
 # - Comparison Carta 2 menggunakan column dalam fail yang sama:
-#   SEBENAR 03-2025
+#   SEBENAR 06-2025
 # =======================
 @st.cache_data(show_spinner="Memuatkan data Belanja & Hasil...")
 def load_data():
-    """
-    Loader Q2 2026.
-
-    Semua fungsi dashboard lama dikekalkan. Empat worksheet baharu hanya
-    distandardkan semula kepada struktur dalaman lama yang digunakan oleh
-    sidebar, traffic light, carta, drilldown dan summary.
-    """
-    filename = "1-JPKA-PRESTASI BAJET 06-2026 25072026 V3.XLSX"
-    quarter = "06-2026"
+    df_dict = {}
     errors = []
-    frames = []
 
-    def normalize_header_name(value):
-        return re.sub(r"\s+", " ", str(value).replace("\n", " ")).strip().upper()
-
-    def normalize_sheet(df):
-        df = df.copy()
-        df.columns = [normalize_header_name(col) for col in df.columns]
-        return df
-
-    def col_or_default(df, names, default=""):
-        for name in names:
-            key = normalize_header_name(name)
-            if key in df.columns:
-                return df[key]
-        return pd.Series([default] * len(df), index=df.index)
-
-    def standardize_sheet(df, sheet_name, kategori):
-        df = normalize_sheet(df)
-
-        if sheet_name == "B.PROG":
-            pejabat = col_or_default(df, ["PTJ"], "")
-            ptj1 = col_or_default(df, ["PTJ1"], "")
-            desc = col_or_default(df, ["FUNDED PROGRAM DESCRIPTION"], "")
-            kod1 = col_or_default(df, ["KOD"], "")
-        else:
-            funds_center = col_or_default(df, ["FUNDS CENTER"], "")
-            ptj_asal = col_or_default(df, ["PTJ"], "")
-
-            # Struktur lama mempunyai Pejabat (PTJ) dan PTJ terperinci (PTJ1).
-            # Untuk HQ, Pejabat = HQ. Untuk negeri/cawangan, Pejabat = kod PTJ.
-            pejabat = pd.Series(
-                [
-                    "HQ" if str(fc).strip().startswith("101") else str(ptj).strip()
-                    for fc, ptj in zip(funds_center, ptj_asal)
-                ],
-                index=df.index
-            )
-            ptj1 = ptj_asal
-            desc = col_or_default(df, ["COMMITMENT ITEM DESCRIPTION"], "")
-            kod1 = col_or_default(df, ["KOD CI"], "")
-
-        result = pd.DataFrame({
-            "PTJ": pejabat,
-            "PTJ1": ptj1,
-            "Kategori": kategori,
-            "DESC": desc,
-            "KOD1": kod1,
-            "BAJET 2026": col_or_default(df, ["BAJET 2026"], 0),
-            "BAJET 06-2026": col_or_default(df, ["BAJET 06-2026"], 0),
-            "SEBENAR 06-2026": col_or_default(df, ["SEBENAR 06-2026"], 0),
-            "AUDITED 06-2025": col_or_default(df, ["AUDITED 06-2025"], 0),
-            "Sumber": sheet_name,
-            "Quarter": quarter,
-            "Tahun": 2026,
-        })
-
-        for col in ["PTJ", "PTJ1", "Kategori", "DESC", "KOD1", "Sumber", "Quarter"]:
-            result[col] = (
-                result[col]
-                .fillna("")
-                .astype(str)
-                .str.replace(r"\s+", " ", regex=True)
-                .str.strip()
-            )
-
-        numeric_cols = [
-            "BAJET 2026",
-            "BAJET 06-2026",
-            "SEBENAR 06-2026",
-            "AUDITED 06-2025",
-        ]
-        result = pastikan_numeric(result, numeric_cols)
-
-        # Buang baris kosong/format sahaja, tetapi jangan buang rekod sebenar bernilai sifar.
-        valid_ptj = result["PTJ1"].ne("")
-        not_total = ~result["PTJ1"].str.upper().isin(["JUMLAH", "TOTAL", "NAN", "NONE"])
-        has_content = (
-            result["DESC"].ne("")
-            | result["KOD1"].ne("")
-            | result[numeric_cols].abs().sum(axis=1).gt(0)
-        )
-        result = result[valid_ptj & not_total & has_content].copy()
-
-        return result.reset_index(drop=True)
-
-    sheet_map = {
-        "HASIL": "Hasil",
-        "B.MGRS": "Belanja Mengurus",
-        "B.MODAL": "Belanja Modal",
-        "B.PROG": "Belanja Program",
+    files = {
+        "06-2026": "JPKA_ANALISA PK CIDB 06-2026.xlsx"
     }
 
-    for sheet_name, kategori in sheet_map.items():
+    for q, filename in files.items():
         try:
-            df_sheet = pd.read_excel(
+            df = pd.read_excel(
                 filename,
-                sheet_name=sheet_name,
+                sheet_name="All2",
                 engine="openpyxl"
             )
-            df_standard = standardize_sheet(df_sheet, sheet_name, kategori)
+            df = bersih_nama_column(df)
 
-            if df_standard.empty:
-                errors.append(f"{sheet_name}: Tiada data sah dijumpai.")
-            else:
-                frames.append(df_standard)
+            if "KOD" in df.columns and "KOD1" not in df.columns:
+                df = df.rename(columns={"KOD": "KOD1"})
+
+            rename_map = {
+                # Header baharu Q2 -> nama dalaman lama supaya semua function asal kekal
+                "BAJET 2026": "BAJET 2025",
+                "Bajet 2026": "BAJET 2025",
+                "BAJET2026": "BAJET 2025",
+                "BAJET 06-2026": "SASARAN Q1-25",
+                "SASARAN Q2-26": "SASARAN Q1-25",
+                "SASARAN 06-2026": "SASARAN Q1-25",
+                "BAJET QTR": "SASARAN Q1-25",
+                "SEBENAR Q2-26": "SEBENAR Q1-25",
+                "SEBENAR 06-2026": "SEBENAR Q1-25",
+                "SEBENAR 06-2025": "SEBENAR 06-2025",
+                # Header legacy dalam fail massage turut disokong
+                "SASARAN Q1-25": "SASARAN Q1-25",
+                "SEBENAR Q1-25": "SEBENAR Q1-25",
+                "PRESTASI 03-2025": "PRESTASI 03-2025"
+            }
+
+            safe_rename = {}
+            for old_col, new_col in rename_map.items():
+                if old_col in df.columns:
+                    if old_col == new_col or new_col not in df.columns:
+                        safe_rename[old_col] = new_col
+
+            df = df.rename(columns=safe_rename)
+
+            if "SEBENAR 06-2025" not in df.columns:
+                # Jika fail hanya ada nisbah PRESTASI 03-2025 bagi item mengurus,
+                # anggarkan nilai tahun lepas = sebenar semasa / nisbah.
+                if "PRESTASI 03-2025" in df.columns:
+                    ratio = pd.to_numeric(df["PRESTASI 03-2025"], errors="coerce")
+                    current = pd.to_numeric(df.get("SEBENAR Q1-25", 0), errors="coerce").fillna(0)
+                    df["SEBENAR 06-2025"] = current.where(ratio.isna() | (ratio == 0), current / ratio)
+                else:
+                    df["SEBENAR 06-2025"] = 0
+
+            df["Sumber"] = q
+            df["Quarter"] = q
+            df["Tahun"] = int(q.split("-")[1])
+
+            numeric_cols = [
+                "BAJET 2025",
+                "SASARAN Q1-25",
+                "SEBENAR Q1-25",
+                "SEBENAR 06-2025"
+            ]
+            df = pastikan_numeric(df, numeric_cols)
+
+            text_columns = [
+                "PTJ", "PTJ1", "Kategori", "DESC", "KOD1",
+                "Sumber", "Quarter"
+            ]
+            for col in text_columns:
+                if col in df.columns:
+                    df[col] = df[col].fillna("").astype(str).str.strip()
+
+            df_dict[q] = df
 
         except Exception as e:
-            errors.append(f"{sheet_name} - {filename}: {e}")
+            errors.append(f"{q} - {filename}: {e}")
 
-    if not frames:
-        return {}, errors
-
-    df_gabung = pd.concat(frames, ignore_index=True)
-
-    numeric_cols = [
-        "BAJET 2026",
-        "BAJET 06-2026",
-        "SEBENAR 06-2026",
-        "AUDITED 06-2025",
-    ]
-    for col in numeric_cols:
-        df_gabung[col] = (
-            pd.to_numeric(df_gabung[col], errors="coerce")
-            .replace([float("inf"), float("-inf")], 0)
-            .fillna(0)
-        )
-
-    return {quarter: df_gabung}, errors
+    return df_dict, errors
 
 
 # =======================
@@ -1523,7 +1464,7 @@ def load_data():
 # =======================
 @st.cache_data(show_spinner="Memuatkan data Geran...")
 def load_data_geran():
-    filename = "GL ADV 03-2026 14052026.XLSX"
+    filename = "3-GL ADV 06-2026 24072026.XLSX"
 
     try:
         df_data = pd.read_excel(
@@ -1532,6 +1473,25 @@ def load_data_geran():
             engine="openpyxl"
         )
         df_data = bersih_nama_column(df_data)
+
+        # Fail Q2 tidak semestinya mempunyai NAMA1. Bina label ringkas tanpa ubah NAMA asal.
+        if "NAMA1" not in df_data.columns and "NAMA" in df_data.columns:
+            nama_ringkas = {
+                "CIDB Holdings Sdn Bhd": "CIDB HOLDINGS",
+                "CIDB Digital Sdn Bhd": "CIDB DIGITAL",
+                "CREAM": "CREAM",
+                "CLAB": "CLAB",
+                "ABM Selangor Sdn Bhd": "ABM SELANGOR",
+                "ABM Johor Sdn Bhd": "ABM JOHOR",
+                "ABM Utara Sdn Bhd": "ABM UTARA",
+                "ABM Terengganu Sdn Bhd": "ABM TERENGGANU",
+                "ABM Sabah Sdn Bhd": "ABM SABAH",
+                "ABM Sarawak Sdn Bhd": "ABM SARAWAK",
+                "CIDB IBS Sdn Bhd": "CIDB IBS",
+                "CIDB Technologies Sdn Bhd": "CIDB TECHNOLOGIES",
+            }
+            clean_nama = df_data["NAMA"].fillna("").astype(str).str.strip()
+            df_data["NAMA1"] = clean_nama.map(nama_ringkas).fillna(clean_nama)
 
         for col in ["NAMA", "NAMA1", "LEGEND", "PTJ"]:
             if col in df_data.columns:
@@ -1577,8 +1537,8 @@ menu_map = {
 menu = menu_map.get(menu_label, "1. Belanja & Hasil")
 
 tajuk_utama = {
-    "1. Belanja & Hasil": "📊 PRESTASI PERBELANJAAN DAN HASIL CIDB",
-    "2. Geran": "📊 PRESTASI GERAN",
+    "1. Belanja & Hasil": "📊 PRESTASI PERBELANJAAN DAN HASIL CIDB SEHINGGA 30 JUN 2026",
+    "2. Geran": "📊 PRESTASI GERAN SEHINGGA 30 JUN 2026",
     "3. P&L": "📊 Profit & Loss",
     "4. Balance Sheet": "📊 Balance Sheet",
     "5. Cash Flow": "📊 Cash Flow",
@@ -1650,7 +1610,7 @@ if menu == "1. Belanja & Hasil":
 
     required_cols = [
         "PTJ", "PTJ1", "Kategori", "DESC", "KOD1",
-        "BAJET 2026", "BAJET 06-2026", "SEBENAR 06-2026", "AUDITED 06-2025", "Quarter"
+        "BAJET 2025", "SASARAN Q1-25", "SEBENAR Q1-25", "SEBENAR 06-2025", "Quarter"
     ]
     missing_cols = [col for col in required_cols if col not in df_tapis.columns]
     if missing_cols:
@@ -1990,20 +1950,20 @@ if menu == "1. Belanja & Hasil":
     st.markdown("### 🚦 STATUS PRESTASI PTJ")
 
     df_akhir["Prestasi_%"] = df_akhir.apply(
-        lambda row: hitung_prestasi(row["SEBENAR 06-2026"], row["BAJET 06-2026"]),
+        lambda row: hitung_prestasi(row["SEBENAR Q1-25"], row["SASARAN Q1-25"]),
         axis=1
     )
 
     df_group = df_akhir.groupby("PTJ1", as_index=False).agg({
-        "BAJET 2026": "sum",
-        "BAJET 06-2026": "sum",
-        "SEBENAR 06-2026": "sum"
+        "BAJET 2025": "sum",
+        "SASARAN Q1-25": "sum",
+        "SEBENAR Q1-25": "sum"
     })
 
     # Prestasi_% lama dikekalkan untuk status lampu / drilldown.
     # Formula lama: Sebenar / Sasaran
     df_group["Prestasi_%"] = df_group.apply(
-        lambda row: hitung_prestasi(row["SEBENAR 06-2026"], row["BAJET 06-2026"]),
+        lambda row: hitung_prestasi(row["SEBENAR Q1-25"], row["SASARAN Q1-25"]),
         axis=1
     )
 
@@ -2016,28 +1976,28 @@ if menu == "1. Belanja & Hasil":
     # - Papar nilai graf = 0%
     # - Papar nota #DIV/0! pada label
 
-    df_group["Nota_DIV0"] = df_group["BAJET 2026"].apply(
+    df_group["Nota_DIV0"] = df_group["BAJET 2025"].apply(
         lambda x: "#DIV/0!" if pd.to_numeric(x, errors="coerce") in [0, 0.0] else ""
     )
 
     df_group["% Prestasi"] = df_group.apply(
         lambda row: 0
-        if pd.to_numeric(row["BAJET 2026"], errors="coerce") in [0, 0.0]
-        else hitung_prestasi(row["SEBENAR 06-2026"], row["BAJET 2026"]),
+        if pd.to_numeric(row["BAJET 2025"], errors="coerce") in [0, 0.0]
+        else hitung_prestasi(row["SEBENAR Q1-25"], row["BAJET 2025"]),
         axis=1
     )
 
     df_group["% Sasaran"] = df_group.apply(
         lambda row: 0
-        if pd.to_numeric(row["BAJET 2026"], errors="coerce") in [0, 0.0]
-        else hitung_prestasi(row["BAJET 06-2026"], row["BAJET 2026"]),
+        if pd.to_numeric(row["BAJET 2025"], errors="coerce") in [0, 0.0]
+        else hitung_prestasi(row["SASARAN Q1-25"], row["BAJET 2025"]),
         axis=1
     )
 
     df_group["% Pencapaian"] = df_group.apply(
         lambda row: 0
-        if pd.to_numeric(row["BAJET 06-2026"], errors="coerce") in [0, 0.0]
-        else hitung_prestasi(row["SEBENAR 06-2026"], row["BAJET 06-2026"]),
+        if pd.to_numeric(row["SASARAN Q1-25"], errors="coerce") in [0, 0.0]
+        else hitung_prestasi(row["SEBENAR Q1-25"], row["SASARAN Q1-25"]),
         axis=1
     )
 
@@ -2046,9 +2006,9 @@ if menu == "1. Belanja & Hasil":
     usaha = len(df_group[df_group["Prestasi_%"] < 85])
     total = len(df_group)
 
-    total_bajet = df_akhir["BAJET 2026"].sum()
-    total_sebenar = df_akhir["SEBENAR 06-2026"].sum()
-    total_sasaran = df_akhir["BAJET 06-2026"].sum()
+    total_bajet = df_akhir["BAJET 2025"].sum()
+    total_sebenar = df_akhir["SEBENAR Q1-25"].sum()
+    total_sasaran = df_akhir["SASARAN Q1-25"].sum()
 
     # Area traffic light:
     # SASARAN    = Sasaran / Bajet
@@ -2144,17 +2104,17 @@ if menu == "1. Belanja & Hasil":
         if not df_show.empty:
             df_show_list = df_show[[
                 "PTJ1",
-                "BAJET 2026",
-                "BAJET 06-2026",
-                "SEBENAR 06-2026",
+                "BAJET 2025",
+                "SASARAN Q1-25",
+                "SEBENAR Q1-25",
                 "Prestasi_%"
             ]].copy()
 
             df_show_list = df_show_list.rename(columns={
                 "PTJ1": "PTJ",
-                "BAJET 2026": "Bajet Tahunan",
-                "BAJET 06-2026": "Bajet Qtr",
-                "SEBENAR 06-2026": "Sebenar",
+                "BAJET 2025": "Bajet Tahunan",
+                "SASARAN Q1-25": "Bajet Qtr",
+                "SEBENAR Q1-25": "Sebenar",
                 "Prestasi_%": "Pencapaian (%)"
             })
 
@@ -2187,9 +2147,9 @@ if menu == "1. Belanja & Hasil":
                     ("Hasil", "HASIL", col_k4)
                 ]
                 for jenis, tajuk, col in jenis_list:
-                    b = df_q[df_q["Jenis_Belanja"] == jenis]["BAJET 2026"].sum()
-                    s = df_q[df_q["Jenis_Belanja"] == jenis]["BAJET 06-2026"].sum()
-                    se = df_q[df_q["Jenis_Belanja"] == jenis]["SEBENAR 06-2026"].sum()
+                    b = df_q[df_q["Jenis_Belanja"] == jenis]["BAJET 2025"].sum()
+                    s = df_q[df_q["Jenis_Belanja"] == jenis]["SASARAN Q1-25"].sum()
+                    se = df_q[df_q["Jenis_Belanja"] == jenis]["SEBENAR Q1-25"].sum()
                     with col:
                         html(f"""
                         <div class="card">
@@ -2211,9 +2171,9 @@ if menu == "1. Belanja & Hasil":
 
     with st.expander("📊 CARTA 1: PERBANDINGAN  KATEGORI", expanded=False):
         df_chart = df_akhir.copy()
-        df_chart["BAJET_JT"] = df_chart["BAJET 2026"] / 1_000_000
-        df_chart["SASARAN_JT"] = df_chart["BAJET 06-2026"] / 1_000_000
-        df_chart["SEBENAR_JT"] = df_chart["SEBENAR 06-2026"] / 1_000_000
+        df_chart["BAJET_JT"] = df_chart["BAJET 2025"] / 1_000_000
+        df_chart["SASARAN_JT"] = df_chart["SASARAN Q1-25"] / 1_000_000
+        df_chart["SEBENAR_JT"] = df_chart["SEBENAR Q1-25"] / 1_000_000
 
         if len(pilih_quarter) > 1:
             cols = st.columns(len(pilih_quarter))
@@ -2278,16 +2238,16 @@ if menu == "1. Belanja & Hasil":
         # =======================
         df_compare = df_akhir.copy()
 
-        if "AUDITED 06-2025" not in df_compare.columns:
+        if "SEBENAR 06-2025" not in df_compare.columns:
             st.warning("Column SEBENAR 06-2025 tidak dijumpai dalam data Excel.")
         else:
             nilai_2026 = pd.to_numeric(
-                df_compare["SEBENAR 06-2026"],
+                df_compare["SEBENAR Q1-25"],
                 errors="coerce"
             ).fillna(0).sum()
 
             nilai_2025 = pd.to_numeric(
-                df_compare["AUDITED 06-2025"],
+                df_compare["SEBENAR 06-2025"],
                 errors="coerce"
             ).fillna(0).sum()
 
@@ -2411,8 +2371,8 @@ if menu == "1. Belanja & Hasil":
                 df_q = df_akhir[df_akhir["Quarter"] == q]
                 df_c2 = (
                     df_q.groupby("DESC", as_index=False)
-                    .agg({"BAJET 06-2026": "sum", "SEBENAR 06-2026": "sum"})
-                    .sort_values("SEBENAR 06-2026", ascending=False)
+                    .agg({"SASARAN Q1-25": "sum", "SEBENAR Q1-25": "sum"})
+                    .sort_values("SEBENAR Q1-25", ascending=False)
                     .head(20)
                 )
                 with cols[i]:
@@ -2420,7 +2380,7 @@ if menu == "1. Belanja & Hasil":
                     fig2 = px.bar(
                         df_c2,
                         y="DESC",
-                        x=["BAJET 06-2026", "SEBENAR 06-2026"],
+                        x=["SASARAN Q1-25", "SEBENAR Q1-25"],
                         orientation="h",
                         barmode="group",
                         height=760,
@@ -2444,14 +2404,14 @@ if menu == "1. Belanja & Hasil":
         else:
             df_c2 = (
                 df_akhir.groupby("DESC", as_index=False)
-                .agg({"BAJET 06-2026": "sum", "SEBENAR 06-2026": "sum"})
-                .sort_values("SEBENAR 06-2026", ascending=False)
+                .agg({"SASARAN Q1-25": "sum", "SEBENAR Q1-25": "sum"})
+                .sort_values("SEBENAR Q1-25", ascending=False)
                 .head(20)
             )
             fig2 = px.bar(
                 df_c2,
                 y="DESC",
-                x=["BAJET 06-2026", "SEBENAR 06-2026"],
+                x=["SASARAN Q1-25", "SEBENAR Q1-25"],
                 orientation="h",
                 barmode="group",
                 height=760,
@@ -2479,15 +2439,15 @@ if menu == "1. Belanja & Hasil":
         df_by_kod_item = (
             df_akhir.groupby(["KOD1"], as_index=False)
             .agg({
-                "SEBENAR 06-2026": "sum"
+                "SEBENAR Q1-25": "sum"
             })
         )
 
-        df_by_kod_item["SEBENAR_JT"] = df_by_kod_item["SEBENAR 06-2026"] / 1_000_000
+        df_by_kod_item["SEBENAR_JT"] = df_by_kod_item["SEBENAR Q1-25"] / 1_000_000
 
         df_by_kod_item = (
             df_by_kod_item
-            .sort_values("SEBENAR 06-2026", ascending=False)
+            .sort_values("SEBENAR Q1-25", ascending=False)
             .head(25)
         )
 
@@ -2505,7 +2465,7 @@ if menu == "1. Belanja & Hasil":
             x="SEBENAR_JT",
             orientation="h",
             height=850,
-            text=df_by_kod_item["SEBENAR 06-2026"].apply(format_nilai),
+            text=df_by_kod_item["SEBENAR Q1-25"].apply(format_nilai),
             labels={
                 "KOD1": "Kod Item",
                 "SEBENAR_JT": "Sebenar"
@@ -2576,34 +2536,34 @@ if menu == "1. Belanja & Hasil":
 
         df_c6 = df_group.copy()
 
-        df_c6["BAJET 2026"] = pd.to_numeric(
-            df_c6["BAJET 2026"],
+        df_c6["BAJET 2025"] = pd.to_numeric(
+            df_c6["BAJET 2025"],
             errors="coerce"
         ).fillna(0)
 
-        df_c6["BAJET 06-2026"] = pd.to_numeric(
-            df_c6["BAJET 06-2026"],
+        df_c6["SASARAN Q1-25"] = pd.to_numeric(
+            df_c6["SASARAN Q1-25"],
             errors="coerce"
         ).fillna(0)
 
-        df_c6["SEBENAR 06-2026"] = pd.to_numeric(
-            df_c6["SEBENAR 06-2026"],
+        df_c6["SEBENAR Q1-25"] = pd.to_numeric(
+            df_c6["SEBENAR Q1-25"],
             errors="coerce"
         ).fillna(0)
 
         # Line merah = Pencapaian (%) pada axis kanan.
         df_c6["% Pencapaian"] = df_c6.apply(
             lambda row: None
-            if row["BAJET 06-2026"] <= 0
-            else hitung_prestasi(row["SEBENAR 06-2026"], row["BAJET 06-2026"]),
+            if row["SASARAN Q1-25"] <= 0
+            else hitung_prestasi(row["SEBENAR Q1-25"], row["SASARAN Q1-25"]),
             axis=1
         )
 
         # Bar hijau = Jumlah Sebenar.
-        df_c6["Jumlah Sebenar"] = df_c6["SEBENAR 06-2026"]
+        df_c6["Jumlah Sebenar"] = df_c6["SEBENAR Q1-25"]
 
         # Line kuning = Nilai Sasaran, bukan peratus.
-        df_c6["Jumlah Sasaran"] = df_c6["BAJET 06-2026"]
+        df_c6["Jumlah Sasaran"] = df_c6["SASARAN Q1-25"]
 
         # =====================================================
         # SORT CARTA 6
@@ -2765,13 +2725,13 @@ if menu == "1. Belanja & Hasil":
 
     with st.expander("📋 SUMMARY KESELURUHAN", expanded=False):
         summary = df_akhir.groupby(["PTJ1", "Kategori", "DESC", "Quarter"], as_index=False).agg({
-            "BAJET 2026": "sum",
-            "BAJET 06-2026": "sum",
-            "SEBENAR 06-2026": "sum",
-            "AUDITED 06-2025": "sum"
+            "BAJET 2025": "sum",
+            "SASARAN Q1-25": "sum",
+            "SEBENAR Q1-25": "sum",
+            "SEBENAR 06-2025": "sum"
         })
         summary["Prestasi_%"] = summary.apply(
-            lambda row: hitung_prestasi(row["SEBENAR 06-2026"], row["BAJET 06-2026"]),
+            lambda row: hitung_prestasi(row["SEBENAR Q1-25"], row["SASARAN Q1-25"]),
             axis=1
         )
         summary = summary.round(2)
@@ -2865,10 +2825,12 @@ elif menu == "2. Geran":
     amount_col = detect_amount_column(df_geran_work)
     if amount_col is not None:
         df_geran_work[amount_col] = clean_numeric_series(df_geran_work[amount_col])
-
-        # Buang semua nilai negatif untuk keseluruhan Modul Geran.
-        # Ini digunakan untuk KPI, slicer, carta dan jadual DATA GERAN.
-        df_geran_work = df_geran_work[df_geran_work[amount_col] >= 0].copy()
+        # Dalam fail GL Q2, PERBELANJAAN dan BAYAR BALIK direkod sebagai negatif.
+        # Tukar kepada amaun positif untuk paparan; formula baki tetap menolaknya.
+        legend_norm = df_geran_work["LEGEND"].fillna("").astype(str).str.strip().str.upper()
+        mask_out = legend_norm.isin(["PERBELANJAAN", "BYR BALIK", "BAYAR BALIK"])
+        df_geran_work.loc[mask_out, amount_col] = df_geran_work.loc[mask_out, amount_col].abs()
+        df_geran_work.loc[~mask_out, amount_col] = df_geran_work.loc[~mask_out, amount_col].clip(lower=0)
 
     df_geran_tapis = df_geran_work.copy()
 
@@ -3569,7 +3531,7 @@ elif menu == "3. P&L":
     # =======================
     # P&L - DATA RASMI JADUAL 6
     # Rujukan: 4.0 PRESTASI KEWANGAN CIDB
-    # Jadual 6: Ringkasan Hasil dan Perbelanjaan Sehingga 31 Mac 2026
+    # Jadual 6: Ringkasan Hasil dan Perbelanjaan Sehingga 30 Jun 2026
     # =======================
 
     def kira_prestasi(sebenar, asas):
@@ -3596,7 +3558,7 @@ elif menu == "3. P&L":
             "Hasil",
             "Belanja program industri",
             "Belanja mengurus",
-            "Jumlah perbelanjaan",
+            "Jumlah perbelanjaan operasi",
             "Untung sebelum cukai dan zakat",
             "Cukai",
             "Zakat",
@@ -3608,78 +3570,38 @@ elif menu == "3. P&L":
             "Lebihan/(Kurangan) Pendapatan Tidak Termasuk S/Nilai & H.Ragu",
         ],
         "BAJET 2026": [
-            485_000_000,
-            205_000_000,
-            189_000_000,
-            394_000_000,
-            91_000_000,
-            8_000_000,
-            1_000_000,
-            82_000_000,
-            91_000_000,
-            485_000_000,
-            0,
-            24_600_000,
-            24_600_000,
+            485_000_000, 205_000_000, 189_000_000, 394_000_000,
+            91_000_000, 8_000_000, 1_000_000, 82_000_000,
+            91_000_000, 485_000_000, 0, 24_600_000, 24_600_000,
         ],
-        "BAJET 03-2026": [
-            120_730_700,
-            30_858_400,
-            39_205_700,
-            70_064_100,
-            50_666_600,
-            0,
-            0,
-            50_666_600,
-            3_324_400,
-            73_388_500,
-            47_342_200,
-            6_000_000,
-            53_342_200,
+        "BAJET 06-2026": [
+            239_500_000, 75_200_000, 78_853_000, 154_053_000,
+            85_447_000, 0, 0, 85_447_000,
+            11_845_000, 165_898_000, 73_602_000, 13_502_500, 87_104_500,
         ],
-        "SEBENAR 03-2026": [
-            130_107_903,
-            28_262_263,
-            35_170_017,
-            63_432_280,
-            66_675_622,
-            0,
-            0,
-            66_675_622,
-            2_755_188,
-            66_187_468,
-            63_920_434,
-            5_865_129,
-            69_785_563,
+        "SEBENAR 06-2026": [
+            281_306_655, 71_481_260, 72_733_800, 144_215_060,
+            137_091_595, 0, 0, 137_091_595,
+            10_539_572, 154_754_633, 126_552_022, 12_233_703, 138_785_725,
         ],
-        "SEBENAR 03-2025": [
-            109_523_154,
-            25_014_879,
-            32_782_537,
-            57_797_416,
-            51_725_738,
-            0,
-            0,
-            51_725_738,
-            1_042_041,
-            58_839_457,
-            50_683_697,
-            5_828_867,
-            56_512_564,
+        "SEBENAR 06-2025": [
+            248_235_126, 70_191_199, 68_704_605, 138_895_804,
+            109_339_322, 0, 0, 109_339_322,
+            5_938_709, 144_834_514, 103_400_612, 11_635_486, 115_036_098,
         ],
     })
 
     # Kira peratus ikut formula Jadual 6.
-    df_pl_jadual6["Prestasi Bajet 03-2026"] = df_pl_jadual6.apply(
-        lambda row: kira_prestasi(row["SEBENAR 03-2026"], row["BAJET 03-2026"]),
+    df_pl_jadual6["Prestasi Bajet 06-2026"] = df_pl_jadual6.apply(
+        lambda row: kira_prestasi(row["SEBENAR 06-2026"], row["BAJET 06-2026"]),
         axis=1
     )
     df_pl_jadual6["Prestasi Bajet 2026"] = df_pl_jadual6.apply(
-        lambda row: kira_prestasi(row["SEBENAR 03-2026"], row["BAJET 2026"]),
+        lambda row: kira_prestasi(row["SEBENAR 06-2026"], row["BAJET 2026"]),
         axis=1
     )
-    df_pl_jadual6["Prestasi 03-26 vs 03-25"] = df_pl_jadual6.apply(
-        lambda row: kira_prestasi(row["SEBENAR 03-2026"], row["SEBENAR 03-2025"]),
+    df_pl_jadual6["Prestasi 06-26 vs 06-25"] = df_pl_jadual6.apply(
+        lambda row: kira_prestasi(row["SEBENAR 06-2026"], row["SEBENAR 06-2025"]),
         axis=1
     )
 
@@ -3690,41 +3612,21 @@ elif menu == "3. P&L":
             "JUMLAH PERBELANJAAN",
             "LEBIHAN/(KURANGAN) PENDAPATAN TIDAK TERMASUK S/NILAI & H.RAGU"
         ],
-        "BAJET 2026": [
-            485_000_000,
-            485_000_000,
-            24_600_000,
-        ],
-        "BAJET 03-2026": [
-            120_730_700,
-            73_388_500,
-            53_342_200,
-        ],
-        "SEBENAR 03-2026": [
-            130_107_903,
-            66_187_468,
-            69_785_563,
-        ],
-        "SEBENAR 03-2025": [
-            109_523_154,
-            58_839_457,
-            56_512_564,
-        ],
+        "BAJET 2026": [485_000_000, 485_000_000, 24_600_000],
+        "BAJET 06-2026": [239_500_000, 165_898_000, 87_104_500],
+        "SEBENAR 06-2026": [281_306_655, 154_754_633, 138_785_725],
+        "SEBENAR 06-2025": [248_235_126, 144_834_514, 115_036_098],
     })
 
     df_pecahan_belanja = pd.DataFrame({
-        "KATEGORI": [
-            "Belanja program industri",
-            "Belanja mengurus",
-            "Belanja Modal"
-        ],
+        "KATEGORI": ["Belanja program industri", "Belanja mengurus", "Belanja Modal"],
         "BAJET 2026": [205_000_000, 189_000_000, 91_000_000],
-        "BAJET 03-2026": [30_858_400, 39_205_700, 3_324_400],
-        "SEBENAR 03-2026": [28_262_263, 35_170_017, 2_755_188],
-        "SEBENAR 03-2025": [25_014_879, 32_782_537, 1_042_041],
-        "Prestasi Bajet 03-2026": [92, 90, 83],
-        "Prestasi Bajet 2026": [14, 19, 3],
-        "Prestasi 03-26 vs 03-25": [113, 107, 264],
+        "BAJET 06-2026": [75_200_000, 78_853_000, 11_845_000],
+        "SEBENAR 06-2026": [71_481_260, 72_733_800, 10_539_572],
+        "SEBENAR 06-2025": [70_191_199, 68_704_605, 5_938_709],
+        "Prestasi Bajet 06-2026": [95, 92, 89],
+        "Prestasi Bajet 2026": [35, 38, 12],
+        "Prestasi 06-26 vs 06-25": [102, 106, 177],
     })
 
     # =======================
@@ -3737,27 +3639,27 @@ elif menu == "3. P&L":
     col_pl1, col_pl2, col_pl3, col_pl4 = st.columns(4)
     with col_pl1:
         st.metric(
-            "Hasil Sebenar 03-2026",
-            format_nilai(hasil_row["SEBENAR 03-2026"]),
-            f'{label_pct(kira_prestasi(hasil_row["SEBENAR 03-2026"], hasil_row["BAJET 03-2026"]))} vs Bajet 03-2026'
+            "Hasil Sebenar 06-2026",
+            format_nilai(hasil_row["SEBENAR 06-2026"]),
+            f'{label_pct(kira_prestasi(hasil_row["SEBENAR 06-2026"], hasil_row["BAJET 06-2026"]))} vs Bajet 06-2026'
         )
     with col_pl2:
         st.metric(
             "Jumlah Perbelanjaan",
-            format_nilai(belanja_row["SEBENAR 03-2026"]),
-            f'{label_pct(kira_prestasi(belanja_row["SEBENAR 03-2026"], belanja_row["BAJET 03-2026"]))} vs Bajet 03-2026'
+            format_nilai(belanja_row["SEBENAR 06-2026"]),
+            f'{label_pct(kira_prestasi(belanja_row["SEBENAR 06-2026"], belanja_row["BAJET 06-2026"]))} vs Bajet 06-2026'
         )
     with col_pl3:
         st.metric(
             "Lebihan Pendapatan",
-            format_nilai(lebihan_row["SEBENAR 03-2026"]),
-            f'{format_nilai(lebihan_row["SEBENAR 03-2026"] - lebihan_row["SEBENAR 03-2025"])} vs 03-2025'
+            format_nilai(lebihan_row["SEBENAR 06-2026"]),
+            f'{format_nilai(lebihan_row["SEBENAR 06-2026"] - lebihan_row["SEBENAR 06-2025"])} vs 06-2025'
         )
     with col_pl4:
         st.metric(
             "Untung Selepas Cukai & Zakat",
-            format_nilai(66_675_622),
-            f'{format_nilai(66_675_622 - 51_725_738)} vs 03-2025'
+            format_nilai(137_091_595),
+            f'{format_nilai(137_091_595 - 109_339_322)} vs 06-2025'
         )
 
     st.markdown(f"### 📊 {pilihan_pl}")
@@ -3770,7 +3672,7 @@ elif menu == "3. P&L":
 
         df_chart_pl = df_chart_pl.melt(
             id_vars="PERKARA",
-            value_vars=["BAJET 2026", "BAJET 03-2026", "SEBENAR 03-2026", "SEBENAR 03-2025"],
+            value_vars=["BAJET 2026", "BAJET 06-2026", "SEBENAR 06-2026", "SEBENAR 06-2025"],
             var_name="JENIS",
             value_name="NILAI"
         )
@@ -3798,7 +3700,7 @@ elif menu == "3. P&L":
                 "NILAI_JUTA": "Juta",
                 "PERKARA": ""
             },
-            title="PRESTASI HASIL & PERBELANJAAN CIDB SEHINGGA 31 MAC 2026"
+            title="PRESTASI HASIL & PERBELANJAAN CIDB SEHINGGA 30 JUN 2026"
         )
 
         fig_pl.update_traces(
@@ -3839,7 +3741,7 @@ elif menu == "3. P&L":
 
         df_belanja_chart = df_pecahan_belanja.melt(
             id_vars="KATEGORI",
-            value_vars=["BAJET 2026", "BAJET 03-2026", "SEBENAR 03-2026", "SEBENAR 03-2025"],
+            value_vars=["BAJET 2026", "BAJET 06-2026", "SEBENAR 06-2026", "SEBENAR 06-2025"],
             var_name="JENIS",
             value_name="NILAI"
         )
@@ -3864,7 +3766,7 @@ elif menu == "3. P&L":
                 "NILAI_JUTA": "Juta",
                 "JENIS": ""
             },
-            title="PECAHAN BELANJA CIDB SEHINGGA 31 MAC 2026"
+            title="PECAHAN BELANJA CIDB SEHINGGA 30 JUN 2026"
         )
 
         fig_belanja.update_traces(
@@ -3889,7 +3791,7 @@ elif menu == "3. P&L":
 
         df_belanja_pct = df_pecahan_belanja.melt(
             id_vars="KATEGORI",
-            value_vars=["Prestasi Bajet 03-2026", "Prestasi Bajet 2026", "Prestasi 03-26 vs 03-25"],
+            value_vars=["Prestasi Bajet 06-2026", "Prestasi Bajet 2026", "Prestasi 06-26 vs 06-25"],
             var_name="JENIS",
             value_name="PERATUS"
         )
@@ -3923,15 +3825,15 @@ elif menu == "3. P&L":
         df_surplus_termasuk_chart = pd.DataFrame({
             "JENIS": [
                 "BAJET 2026",
-                "BAJET 03-2026",
-                "SEBENAR 03-2026",
-                "SEBENAR 03-2025"
+                "BAJET 06-2026",
+                "SEBENAR 06-2026",
+                "SEBENAR 06-2025"
             ],
             "NILAI": [
                 hasil_term["BAJET 2026"] - jumlah_perbelanjaan_term["BAJET 2026"],
-                hasil_term["BAJET 03-2026"] - jumlah_perbelanjaan_term["BAJET 03-2026"],
-                hasil_term["SEBENAR 03-2026"] - jumlah_perbelanjaan_term["SEBENAR 03-2026"],
-                hasil_term["SEBENAR 03-2025"] - jumlah_perbelanjaan_term["SEBENAR 03-2025"],
+                hasil_term["BAJET 06-2026"] - jumlah_perbelanjaan_term["BAJET 06-2026"],
+                hasil_term["SEBENAR 06-2026"] - jumlah_perbelanjaan_term["SEBENAR 06-2026"],
+                hasil_term["SEBENAR 06-2025"] - jumlah_perbelanjaan_term["SEBENAR 06-2025"],
             ]
         })
 
@@ -3958,9 +3860,9 @@ elif menu == "3. P&L":
             color="JENIS",
             color_discrete_map={
                 "BAJET 2026": "#d9534f",
-                "BAJET 03-2026": "#F59E0B",
-                "SEBENAR 03-2026": "#2e8b57",
-                "SEBENAR 03-2025": "#9CA3AF"
+                "BAJET 06-2026": "#F59E0B",
+                "SEBENAR 06-2026": "#2e8b57",
+                "SEBENAR 06-2025": "#9CA3AF"
             },
             labels={
                 "JENIS": "",
@@ -4001,13 +3903,13 @@ elif menu == "3. P&L":
             uniformtext_mode="show"
         )
 
-        # DOTTED untuk SEBENAR 03-2025
+        # DOTTED untuk SEBENAR 06-2025
         fig_surplus_termasuk.update_traces(
             marker_pattern_shape=".",
             marker_pattern_fgcolor="white",
             marker_pattern_size=7,
             marker_pattern_solidity=0.25,
-            selector=dict(name="SEBENAR 03-2025")
+            selector=dict(name="SEBENAR 06-2025")
         )
 
         st.plotly_chart(
@@ -4022,7 +3924,7 @@ elif menu == "3. P&L":
 
         df_surplus_chart = df_surplus.melt(
             id_vars="PERKARA",
-            value_vars=["BAJET 2026", "BAJET 03-2026", "SEBENAR 03-2026", "SEBENAR 03-2025"],
+            value_vars=["BAJET 2026", "BAJET 06-2026", "SEBENAR 06-2026", "SEBENAR 06-2025"],
             var_name="JENIS",
             value_name="NILAI"
         )
@@ -4040,9 +3942,9 @@ elif menu == "3. P&L":
             color="JENIS",
             color_discrete_map={
                 "BAJET 2026": "#d9534f",
-                "BAJET 03-2026": "#F59E0B",
-                "SEBENAR 03-2026": "#2e8b57",
-                "SEBENAR 03-2025": "#9CA3AF"
+                "BAJET 06-2026": "#F59E0B",
+                "SEBENAR 06-2026": "#2e8b57",
+                "SEBENAR 06-2025": "#9CA3AF"
             },
             labels={
                 "JENIS": "",
@@ -4076,13 +3978,13 @@ elif menu == "3. P&L":
             uniformtext_mode="show"
         )
 
-        # DOTTED untuk SEBENAR 03-2025
+        # DOTTED untuk SEBENAR 06-2025
         fig_surplus.update_traces(
             marker_pattern_shape=".",
             marker_pattern_fgcolor="white",
             marker_pattern_size=7,
             marker_pattern_solidity=0.25,
-            selector=dict(name="SEBENAR 03-2025")
+            selector=dict(name="SEBENAR 06-2025")
         )
 
         st.plotly_chart(fig_surplus, use_container_width=True)
@@ -4102,7 +4004,7 @@ elif menu == "3. P&L":
 
         df_untung_chart = df_untung.melt(
             id_vars="PERKARA",
-            value_vars=["BAJET 2026", "BAJET 03-2026", "SEBENAR 03-2026", "SEBENAR 03-2025"],
+            value_vars=["BAJET 2026", "BAJET 06-2026", "SEBENAR 06-2026", "SEBENAR 06-2025"],
             var_name="JENIS",
             value_name="NILAI"
         )
@@ -4120,10 +4022,10 @@ elif menu == "3. P&L":
     df_show = df_data_pilihan.copy()
 
     money_cols = [
-        "BAJET 2026", "BAJET 03-2026", "SEBENAR 03-2026", "SEBENAR 03-2025"
+        "BAJET 2026", "BAJET 06-2026", "SEBENAR 06-2026", "SEBENAR 06-2025"
     ]
     percent_cols = [
-        "Prestasi Bajet 03-2026", "Prestasi Bajet 2026", "Prestasi 03-26 vs 03-25"
+        "Prestasi Bajet 06-2026", "Prestasi Bajet 2026", "Prestasi 06-26 vs 06-25"
     ]
 
     for col in money_cols:
@@ -4139,7 +4041,7 @@ elif menu == "3. P&L":
     # Papar '-' untuk Cukai/Zakat yang tiada nilai sasaran/sebenar dalam jadual asal.
     if "PERKARA" in df_show.columns:
         cukai_zakat_mask = df_show["PERKARA"].astype(str).isin(["Cukai", "Zakat"])
-        for col in ["BAJET 03-2026", "SEBENAR 03-2026", "SEBENAR 03-2025"]:
+        for col in ["BAJET 06-2026", "SEBENAR 06-2026", "SEBENAR 06-2025"]:
             if col in df_show.columns:
                 df_show.loc[cukai_zakat_mask, col] = "-"
         for col in percent_cols:
@@ -4163,49 +4065,25 @@ elif menu == "4. Balance Sheet":
     # =======================
     # BALANCE SHEET
     # Rujukan Word:
-    # Jadual 7: Penyata Kedudukan Kewangan pada 31 Mac 2026
+    # Jadual 7: Penyata Kedudukan Kewangan pada 30 Jun 2026
     #
     # Data sebenar daripada Word:
-    # 03-2026 dan 2025
+    # 06-2026 dan 2025
     # =======================
 
-    st.markdown("### 📊 PENYATA KEDUDUKAN KEWANGAN CIDB PADA 03-2026")
+    st.markdown("### 📊 PENYATA KEDUDUKAN KEWANGAN CIDB PADA 06-2026")
 
     df_bs = pd.DataFrame({
         "PERKARA": [
             "ASET 2025",
             "LIABILITI & A.BERSIH 2025",
-            "ASET 03-2026",
-            "LIABILITI & A.BERSIH 03-2026"
+            "ASET 06-2026",
+            "LIABILITI & A.BERSIH 06-2026"
         ],
-
-        "ASET BERSIH (RM)": [
-            0,
-            1140889719,
-            0,
-            1207565341
-        ],
-
-        "BUKAN SEMASA (RM)": [
-            493358471,
-            35235965,
-            490248527,
-            35061911
-        ],
-
-        "SEMASA (RM)": [
-            742014399,
-            59247186,
-            764763086,
-            12384361
-        ],
-
-        "JUMLAH": [
-            1235372870,
-            1235372870,
-            1255011613,
-            1255011613
-        ]
+        "ASET BERSIH (RM)": [0, 1_140_889_719, 0, 1_277_981_314],
+        "BUKAN SEMASA (RM)": [493_358_471, 35_235_965, 491_662_480, 34_936_675],
+        "SEMASA (RM)": [742_014_399, 59_247_186, 833_461_314, 12_205_805],
+        "JUMLAH": [1_235_372_870, 1_235_372_870, 1_325_123_794, 1_325_123_794]
     })
 
     # =======================
@@ -4282,7 +4160,7 @@ elif menu == "4. Balance Sheet":
     )
 
     fig_bs.update_layout(
-        title="PENYATA KEDUDUKAN KEWANGAN CIDB PADA 03-2026",
+        title="PENYATA KEDUDUKAN KEWANGAN CIDB PADA 06-2026",
         barmode="stack",
         height=720,
         template="plotly_white",
@@ -4355,49 +4233,22 @@ elif menu == "5. Cash Flow":
     # =======================
     # CASH FLOW
     # Rujukan Word:
-    # Jadual 8: Penyata Aliran Tunai bagi tahun kewangan berakhir 31 Mac 2026
+    # Jadual 8: Penyata Aliran Tunai bagi tahun kewangan berakhir 30 Jun 2026
     #
     # Data diekstrak daripada Word:
-    # 03-2026 dan 2025
+    # 06-2026 dan 2025
     # =======================
 
-    st.markdown("### 📊 PENYATA ALIRAN TUNAI CIDB 03-2026")
+    st.markdown("### 📊 PENYATA ALIRAN TUNAI CIDB 06-2026")
 
     df_cf = pd.DataFrame({
-        "PERKARA": [
-            "SEBENAR 2025",
-            "SEBENAR 03-2026"
-        ],
-
-        "BAKI TUNAI AWAL (RM)": [
-            608091383,
-            693799652
-        ],
-
-        "AKT. OPERASI (RM)": [
-            108433429,
-            5401283
-        ],
-
-        "AKT. PELABURAN (RM)": [
-            -22725160,
-            3730999
-        ],
-
-        "AKT. PEMBIAYAAN (RM)": [
-            0,
-            0
-        ],
-
-        "PENGURANGAN/PENAMBAHAN BERSIH (RM)": [
-            85708269,
-            9132282
-        ],
-
-        "BAKI TUNAI AKHIR (RM)": [
-            693799652,
-            702931934
-        ]
+        "PERKARA": ["SEBENAR 2025", "SEBENAR 06-2026"],
+        "BAKI TUNAI AWAL (RM)": [608_091_383, 693_799_652],
+        "AKT. OPERASI (RM)": [108_433_429, 66_291_475],
+        "AKT. PELABURAN (RM)": [-22_725_160, 2_613_349],
+        "AKT. PEMBIAYAAN (RM)": [0, 0],
+        "PENGURANGAN/PENAMBAHAN BERSIH (RM)": [85_708_269, 68_904_824],
+        "BAKI TUNAI AKHIR (RM)": [693_799_652, 762_704_476]
     })
 
     # =======================
@@ -4458,7 +4309,7 @@ elif menu == "5. Cash Flow":
         )
 
     fig_cf.update_layout(
-        title="PENYATA ALIRAN TUNAI CIDB 03-2026",
+        title="PENYATA ALIRAN TUNAI CIDB 06-2026",
         template="plotly_white",
         barmode="group",
         height=720,
@@ -4478,7 +4329,7 @@ elif menu == "5. Cash Flow":
             categoryorder="array",
             categoryarray=[
                 "SEBENAR 2025",
-                "SEBENAR 03-2026"
+                "SEBENAR 06-2026"
             ]
         ),
         legend=dict(
