@@ -3207,10 +3207,15 @@ elif menu == "2. Geran":
     # =======================
     # CARTA 1
     # =======================
+    # Carta 1 ditukar kepada bar mendatar supaya semua label nilai
+    # mempunyai ruang sendiri dan tidak bertindih antara kategori.
+    tinggi_carta_geran = max(620, len(df_nama_legend) * 74)
+
     fig_geran_nama = px.bar(
         df_nama_legend,
-        x=nama_short_col,
-        y=["PEMBERIAN", "PERBELANJAAN", "BYR BALIK"],
+        y=nama_short_col,
+        x=["PEMBERIAN", "PERBELANJAAN", "BYR BALIK"],
+        orientation="h",
         barmode="group",
         title=" ",
         labels={
@@ -3218,7 +3223,7 @@ elif menu == "2. Geran":
             "variable": "Jenis",
             nama_short_col: "NAMA1"
         },
-        height=600,
+        height=tinggi_carta_geran,
         color_discrete_map={
             "PEMBERIAN": "#f6d365",
             "PERBELANJAAN": "#f4978e",
@@ -3233,18 +3238,51 @@ elif menu == "2. Geran":
     }
 
     for trace in fig_geran_nama.data:
-        trace.text = [format_nilai(x) for x in trace.y]
+        # Untuk bar mendatar, nilai berada pada trace.x.
+        # Nilai kosong/0 tidak dipaparkan supaya carta lebih kemas.
+        trace.text = [
+            "" if pd.to_numeric(x, errors="coerce") == 0 else format_nilai(x)
+            for x in trace.x
+        ]
 
         if trace.name in warna_trace:
             trace.marker.color = warna_trace[trace.name]
 
-    apply_chart_text_style(fig_geran_nama, size=11, angle=0)
+        trace.update(
+            textposition="outside",
+            texttemplate="%{text}",
+            cliponaxis=False,
+            constraintext="none",
+            textfont=dict(size=11, color="black", family="Arial")
+        )
+
+    max_geran_x = max(
+        pd.to_numeric(df_nama_legend["PEMBERIAN"], errors="coerce").fillna(0).max(),
+        pd.to_numeric(df_nama_legend["PERBELANJAAN"], errors="coerce").fillna(0).max(),
+        pd.to_numeric(df_nama_legend["BYR BALIK"], errors="coerce").fillna(0).max(),
+    )
 
     fig_geran_nama.update_layout(
-        xaxis_title=" ",
-        xaxis_tickangle=-45,
-        yaxis_title="Jumlah",
+        xaxis_title="Jumlah (RM)",
+        yaxis_title=" ",
+        yaxis=dict(
+            categoryorder="array",
+            categoryarray=df_nama_legend[nama_short_col].tolist()[::-1],
+            automargin=True
+        ),
+        xaxis=dict(
+            range=[0, max_geran_x * 1.35 if max_geran_x else 1],
+            automargin=True
+        ),
         legend_title_text="Jenis",
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5
+        ),
+        margin=dict(t=110, b=80, l=125, r=150),
         template="plotly_white"
     )
 
@@ -3255,22 +3293,48 @@ elif menu == "2. Geran":
     df_baki_geran = df_nama_legend.copy()
     df_baki_geran = df_baki_geran.sort_values("BAKI GERAN", ascending=False)
 
+    # Carta 2 turut menggunakan bar mendatar supaya setiap label
+    # mempunyai satu baris tersendiri dan tidak bertindih.
+    tinggi_carta_baki = max(620, len(df_baki_geran) * 58)
+
     fig_baki = px.bar(
         df_baki_geran,
-        x=nama_short_col,
-        y="BAKI GERAN",
-        text=df_baki_geran["BAKI GERAN"].apply(format_nilai),
+        y=nama_short_col,
+        x="BAKI GERAN",
+        orientation="h",
+        text=df_baki_geran["BAKI GERAN"].apply(
+            lambda x: "" if pd.to_numeric(x, errors="coerce") == 0 else format_nilai(x)
+        ),
         title=" ",
+        height=tinggi_carta_baki,
         color_discrete_sequence=["#bde0fe"]
     )
 
-    apply_chart_text_style(fig_baki, size=11, angle=0)
+    max_baki_x = pd.to_numeric(
+        df_baki_geran["BAKI GERAN"], errors="coerce"
+    ).fillna(0).abs().max()
+
+    fig_baki.update_traces(
+        textposition="outside",
+        texttemplate="%{text}",
+        cliponaxis=False,
+        constraintext="none",
+        textfont=dict(size=11, color="black", family="Arial")
+    )
 
     fig_baki.update_layout(
-        height=600,
-        xaxis_title=" ",
-        xaxis_tickangle=-45,
-        yaxis_title="Baki Geran",
+        xaxis_title="Baki Geran (RM)",
+        yaxis_title=" ",
+        yaxis=dict(
+            categoryorder="array",
+            categoryarray=df_baki_geran[nama_short_col].tolist()[::-1],
+            automargin=True
+        ),
+        xaxis=dict(
+            range=[0, max_baki_x * 1.35 if max_baki_x else 1],
+            automargin=True
+        ),
+        margin=dict(t=90, b=80, l=125, r=150),
         template="plotly_white"
     )
 
@@ -3302,11 +3366,9 @@ elif menu == "2. Geran":
         except Exception:
             pass
 
-        fig_geran_nama = apply_geran_arrow_labels(
-            fig_geran_nama,
-            orientation="v",
-            threshold_ratio=0.18
-        )
+        # Label nilai sudah disusun pada bar mendatar.
+        # Tidak lagi menggunakan annotation beranak panah kerana ia
+        # menyebabkan label kecil berkumpul dan bertindih.
 
         st.plotly_chart(
             fig_geran_nama,
@@ -3333,18 +3395,31 @@ elif menu == "2. Geran":
             .sum()
         )
 
+        # Carta PTJ ditukar kepada bar mendatar berkumpulan.
+        # Setiap PTJ mempunyai ruang baris sendiri untuk mengelakkan
+        # semua label amaun bertindih.
+        susunan_ptj = (
+            df_ptj.groupby(ptj_col, as_index=False)[amount_col]
+            .sum()
+            .sort_values(amount_col, ascending=True)[ptj_col]
+            .astype(str)
+            .tolist()
+        )
+        tinggi_carta_ptj = max(650, len(susunan_ptj) * 72)
+
         fig_ptj = px.bar(
             df_ptj,
-            x=ptj_col,
-            y=amount_col,
+            y=ptj_col,
+            x=amount_col,
             color="_LEGEND_UPPER",
+            orientation="h",
             barmode="group",
             labels={
                 ptj_col: "PTJ",
                 amount_col: "Jumlah",
                 "_LEGEND_UPPER": "Jenis"
             },
-            height=650,
+            height=tinggi_carta_ptj,
             color_discrete_map={
                 "PEMBERIAN": "#f6d365",
                 "PERBELANJAAN": "#f4978e",
@@ -3353,18 +3428,48 @@ elif menu == "2. Geran":
         )
 
         for trace in fig_ptj.data:
-            trace.text = [format_nilai(x) for x in trace.y]
+            trace.text = [
+                "" if pd.to_numeric(x, errors="coerce") == 0 else format_nilai(x)
+                for x in trace.x
+            ]
 
             if trace.name in warna_trace:
                 trace.marker.color = warna_trace[trace.name]
 
-        apply_chart_text_style(fig_ptj, size=11, angle=0)
+            trace.update(
+                textposition="outside",
+                texttemplate="%{text}",
+                cliponaxis=False,
+                constraintext="none",
+                textfont=dict(size=11, color="black", family="Arial")
+            )
+
+        max_ptj_x = pd.to_numeric(
+            df_ptj[amount_col], errors="coerce"
+        ).fillna(0).abs().max()
 
         fig_ptj.update_layout(
-            xaxis_tickangle=-45,
             template="plotly_white",
-            yaxis_title="Jumlah",
-            legend_title_text="Jenis"
+            xaxis_title="Jumlah (RM)",
+            yaxis_title="PTJ",
+            yaxis=dict(
+                categoryorder="array",
+                categoryarray=susunan_ptj,
+                automargin=True
+            ),
+            xaxis=dict(
+                range=[0, max_ptj_x * 1.35 if max_ptj_x else 1],
+                automargin=True
+            ),
+            legend_title_text="Jenis",
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="center",
+                x=0.5
+            ),
+            margin=dict(t=115, b=80, l=110, r=150)
         )
 
         st.plotly_chart(
