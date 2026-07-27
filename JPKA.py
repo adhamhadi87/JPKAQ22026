@@ -2185,15 +2185,15 @@ if menu == "1. Belanja & Hasil":
                     "PTJ": st.column_config.TextColumn("PTJ"),
                     "Bajet Tahunan": st.column_config.NumberColumn(
                         "Bajet Tahunan",
-                        format=",%.0f"
+                        format="%,.0f"
                     ),
                     "Bajet Qtr": st.column_config.NumberColumn(
                         "Bajet Qtr",
-                        format=",%.0f"
+                        format="%,.0f"
                     ),
                     "Sebenar": st.column_config.NumberColumn(
                         "Sebenar",
-                        format=",%.0f"
+                        format="%,.0f"
                     ),
                     "Pencapaian (%)": st.column_config.NumberColumn(
                         "Pencapaian (%)",
