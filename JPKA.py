@@ -1135,6 +1135,22 @@ def unique_sorted(series):
     return sorted(series.dropna().astype(str).unique().tolist())
 
 
+def natural_sort_key(value):
+    """
+    Susun teks secara natural:
+    - Huruf ikut A-Z.
+    - Nombor ikut 1, 2, 3, ... 10, 11, 12.
+    - Elak susunan teks biasa seperti 1, 10, 11, 2.
+    """
+    import re
+
+    value = "" if pd.isna(value) else str(value).strip()
+    return [
+        int(part) if part.isdigit() else part.lower()
+        for part in re.split(r"(\d+)", value)
+    ]
+
+
 
 def kemas_label_bajet(trace):
     """Tukar nama legend chart kepada label ringkas."""
@@ -2099,7 +2115,19 @@ if menu == "1. Belanja & Hasil":
             df_show = df_group[df_group["Prestasi_%"] < 85].sort_values("Prestasi_%", ascending=False)
         else:
             # Klik Jumlah PTJ: papar semua PTJ tanpa tapisan traffic light.
-            df_show = df_group.sort_values("Prestasi_%", ascending=False)
+            df_show = df_group.copy()
+
+        # Susun senarai PTJ secara natural:
+        # A-Z untuk huruf dan 1, 2, 3, ... 10, 11 untuk nombor.
+        # Contoh: PTJ 1, PTJ 2, PTJ 3, PTJ 10, PTJ 11.
+        if not df_show.empty:
+            df_show = (
+                df_show
+                .assign(_PTJ_SORT=df_show["PTJ1"].apply(natural_sort_key))
+                .sort_values("_PTJ_SORT", ascending=True)
+                .drop(columns=["_PTJ_SORT"])
+                .reset_index(drop=True)
+            )
 
         if not df_show.empty:
             df_show_list = df_show[[
