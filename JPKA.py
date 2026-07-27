@@ -2117,15 +2117,18 @@ if menu == "1. Belanja & Hasil":
             # Klik Jumlah PTJ: papar semua PTJ tanpa tapisan traffic light.
             df_show = df_group.copy()
 
-        # Susun senarai PTJ secara natural:
-        # A-Z untuk huruf dan 1, 2, 3, ... 10, 11 untuk nombor.
-        # Contoh: PTJ 1, PTJ 2, PTJ 3, PTJ 10, PTJ 11.
+        # Default senarai: Pencapaian (%) tertinggi ke terendah.
+        # Nilai kewangan dan peratus KEKAL sebagai nombor supaya apabila
+        # pengguna klik tajuk column, Streamlit menyusun secara numeric:
+        # 1, 2, 3, ... 10, 11 (bukan 1, 10, 11, 2).
         if not df_show.empty:
             df_show = (
                 df_show
-                .assign(_PTJ_SORT=df_show["PTJ1"].apply(natural_sort_key))
-                .sort_values("_PTJ_SORT", ascending=True)
-                .drop(columns=["_PTJ_SORT"])
+                .sort_values(
+                    by=["Prestasi_%", "PTJ1"],
+                    ascending=[False, True],
+                    kind="mergesort"
+                )
                 .reset_index(drop=True)
             )
 
@@ -2146,15 +2149,57 @@ if menu == "1. Belanja & Hasil":
                 "Prestasi_%": "Pencapaian (%)"
             })
 
-            df_show_list["Bajet Tahunan"] = df_show_list["Bajet Tahunan"].apply(format_comma)
-            df_show_list["Bajet Qtr"] = df_show_list["Bajet Qtr"].apply(format_comma)
-            df_show_list["Sebenar"] = df_show_list["Sebenar"].apply(format_comma)
-            df_show_list["Pencapaian (%)"] = df_show_list["Pencapaian (%)"].map(lambda x: f"{x:,.2f}%")
+            # Pastikan column angka benar-benar numeric untuk sorting header.
+            for numeric_col in [
+                "Bajet Tahunan",
+                "Bajet Qtr",
+                "Sebenar",
+                "Pencapaian (%)"
+            ]:
+                df_show_list[numeric_col] = pd.to_numeric(
+                    df_show_list[numeric_col],
+                    errors="coerce"
+                ).fillna(0)
+
+            # PTJ menggunakan susunan kategori natural A-Z / nombor sebenar.
+            # Ini membantu sorting PTJ seperti PTJ 1, PTJ 2, ... PTJ 10.
+            ptj_categories = sorted(
+                df_show_list["PTJ"].astype(str).unique().tolist(),
+                key=natural_sort_key
+            )
+            df_show_list["PTJ"] = pd.Categorical(
+                df_show_list["PTJ"].astype(str),
+                categories=ptj_categories,
+                ordered=True
+            )
+
+            st.caption(
+                "Default: Pencapaian (%) tertinggi. Klik tajuk column untuk susun menaik/menurun."
+            )
 
             st.dataframe(
                 df_show_list,
                 use_container_width=True,
-                hide_index=True
+                hide_index=True,
+                column_config={
+                    "PTJ": st.column_config.TextColumn("PTJ"),
+                    "Bajet Tahunan": st.column_config.NumberColumn(
+                        "Bajet Tahunan",
+                        format=",%.0f"
+                    ),
+                    "Bajet Qtr": st.column_config.NumberColumn(
+                        "Bajet Qtr",
+                        format=",%.0f"
+                    ),
+                    "Sebenar": st.column_config.NumberColumn(
+                        "Sebenar",
+                        format=",%.0f"
+                    ),
+                    "Pencapaian (%)": st.column_config.NumberColumn(
+                        "Pencapaian (%)",
+                        format="%.2f%%"
+                    )
+                }
             )
         else:
             st.info("Tiada rekod untuk kategori ini.")
